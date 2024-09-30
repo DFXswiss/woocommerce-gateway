@@ -15,31 +15,21 @@ The WooCommerce DFX Payment Gateway plugin integrates DFX's cryptocurrency payme
 
 ## Installation
 
-1. Download the plugin files from this repository.
-2. Upload the plugin folder to the `/wp-content/plugins/` directory of your WordPress installation.
-3. Activate the plugin through the 'Plugins' menu in WordPress.
-4. Go to WooCommerce > Settings > Payments and configure the DFX Gateway settings.
-
-## Building the Frontend
-
-This plugin uses WordPress Scripts for building the frontend assets. To set up and build the frontend:
-
-1. Ensure you have Node.js and npm installed on your system.
-2. Navigate to the plugin directory in your terminal.
-3. Install dependencies:
+1. Clone or download this repository to your local machine.
+2. Ensure you have Node.js and npm installed on your system.
+3. Navigate to the plugin directory in your terminal.
+4. Install dependencies:
    ```
    npm install
    ```
-4. To build the assets for production, run:
+5. Build the plugin:
    ```
-   npm run build
+   npm run build:plugin
    ```
-5. For development with hot reloading, use:
-   ```
-   npm run start
-   ```
-
-These commands will compile and bundle the JavaScript and CSS files required for the plugin's frontend functionality.
+   This will create a `dfx-plugin.zip` file in the plugin directory.
+6. Upload the `dfx-plugin.zip` file to your WordPress site via the WordPress admin panel (Plugins > Add New > Upload Plugin).
+7. Activate the plugin through the 'Plugins' menu in WordPress.
+8. Go to WooCommerce > Settings > Payments and configure the DFX Gateway settings.
 
 ## Adding the DFX Payment Page
 
@@ -64,6 +54,21 @@ After installation:
 3. Set the title and description that customers will see during checkout.
 4. Enter your DFX Route ID (default is '16760').
 5. Save the settings.
+
+## Building the Frontend for development
+
+For development purposes, you can use the following npm scripts:
+
+- To build the assets for production:
+  ```
+  npm run build
+  ```
+- For development with hot reloading:
+  ```
+  npm run start
+  ```
+
+These commands will compile and bundle the JavaScript and CSS files required for the plugin's frontend functionality.
 
 ## Support
 
