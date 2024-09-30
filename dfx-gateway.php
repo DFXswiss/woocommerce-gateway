@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.2
+ * Version: 1.0.3
  */
 
 if (! defined('ABSPATH')) {
@@ -67,7 +67,7 @@ function dfx_init_gateway_class()
             add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
             
             // uncomment for adding a webhook
-            //add_action('woocommerce_api_dfx_gateway', array($this, 'handle_webhook'));
+            add_action('woocommerce_api_dfx_gateway', array($this, 'handle_webhook'));
             
             // uncomment this to load the payment scripts
             //add_action('wp_enqueue_scripts', array($this, 'payment_scripts'));
@@ -144,7 +144,60 @@ function dfx_init_gateway_class()
             );
         }
 
-        public function handle_webhook() {}
+        public function handle_webhook()
+        {
+            $payload = file_get_contents('php://input');
+            $data = json_decode($payload, true);
+
+            if (!isset($data['payment']['status']) || !isset($data['externalId'])) {
+                wp_die('Invalid webhook payload', 'Invalid Webhook', array('response' => 400));
+            }
+
+            // Extract order_id from externalId
+            $external_id_parts = explode('/', $data['externalId']);
+            $order_id = isset($external_id_parts[0]) ? intval($external_id_parts[0]) : null;
+
+            if (!$order_id) {
+                wp_die('Invalid order ID', 'Invalid Order', array('response' => 400));
+            }
+
+            $order = wc_get_order($order_id);
+
+            if (!$order) {
+                wp_die('Order not found', 'Invalid Order', array('response' => 404));
+            }
+
+            // Add a note to the order about the DFX webhook call
+            $order->add_order_note(
+                sprintf('DFX webhook received with status: %s', $data['payment']['status']),
+                false, // This makes the note private (only visible to admin)
+                true  // This adds the note as a separate line item
+            );
+
+            $status = $data['payment']['status'];
+
+            switch ($status) {
+                case 'Canceled':
+                    $order->update_status('cancelled', __('Payment canceled by DFX.', 'woocommerce'));
+                    break;
+                case 'Expired':
+                    $order->update_status('failed', __('Payment expired on DFX.', 'woocommerce'));
+                    break;
+                case 'Completed':
+                    $order->update_status('on-hold', __('Payment completed on DFX. Awaiting manual confirmation.', 'woocommerce'));
+                    break;
+                default:
+                    // Add a note for unknown status
+                    $order->add_order_note(
+                        sprintf('Unknown DFX payment status received: %s', $status),
+                        false, // This makes the note private (only visible to admin)
+                        true  // This adds the note as a separate line item
+                    );
+                    break;
+            }
+
+            wp_die('Webhook processed successfully', 'Success', array('response' => 200));
+        }
     }
 }
 

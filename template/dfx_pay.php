@@ -7,10 +7,13 @@ $routeId = isset($dfx_settings['routeId']) ? $dfx_settings['routeId'] : '16760';
 // Calculate expiry date (1 month from now)
 $expiryDate = date('Y-m-d\TH:i:s\Z', strtotime('+1 month'));
 
+// Get the webhook URL
+$webhook_url = WC()->api_request_url('dfx_gateway');
+
 if ($order_id && $amount) {
     ?>
     <iframe 
-        src="https://services.dfx.swiss/pl?routeId=<?php echo esc_attr($routeId); ?>&message=<?php echo esc_attr($order_id); ?>&amount=<?php echo esc_attr($amount); ?>&expiryDate=<?php echo esc_attr($expiryDate); ?>" 
+        src="https://services.dfx.swiss/pl?routeId=<?php echo esc_attr($routeId); ?>&message=<?php echo esc_attr($order_id); ?>&amount=<?php echo esc_attr($amount); ?>&expiryDate=<?php echo esc_attr($expiryDate); ?>&webhookUrl=<?php echo esc_url($webhook_url); ?>"  
         width="100%" 
         height="1500"
         frameborder="0"
