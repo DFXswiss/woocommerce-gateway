@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.3
+ * Version: 1.0.4
  */
 
 if (! defined('ABSPATH')) {
@@ -103,6 +103,13 @@ function dfx_init_gateway_class()
                     'default'     => '16760',
                     'desc_tip'    => true,
                 ),
+                'public_key' => array(
+                    'title'       => 'Public Key',
+                    'type'        => 'textarea',
+                    'description' => 'Enter the public key provided by DFX for signature verification.',
+                    'default'     => '',
+                    'desc_tip'    => true,
+                ),
             );
         }
 
@@ -149,8 +156,24 @@ function dfx_init_gateway_class()
             $payload = file_get_contents('php://input');
             $data = json_decode($payload, true);
 
+            // Get the x-dfx-signature header value
+            $dfx_signature = isset($_SERVER['HTTP_X_DFX_SIGNATURE']) ? sanitize_text_field($_SERVER['HTTP_X_DFX_SIGNATURE']) : '';
+
+            // Get the public key from settings
+            $public_key = $this->get_option('public_key');
+            
+            // Verify the signature against the public key and the payload
+            $verification_result = $this->verify_signature($payload, $dfx_signature, $public_key);
+
+            // If verification fails, log it and return a generic error
+            if (!$verification_result) {
+                error_log('DFX webhook: Signature verification failed');
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+            }
+
+            // Continue processing only if signature is verified
             if (!isset($data['payment']['status']) || !isset($data['externalId'])) {
-                wp_die('Invalid webhook payload', 'Invalid Webhook', array('response' => 400));
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
             }
 
             // Extract order_id from externalId
@@ -158,22 +181,53 @@ function dfx_init_gateway_class()
             $order_id = isset($external_id_parts[0]) ? intval($external_id_parts[0]) : null;
 
             if (!$order_id) {
-                wp_die('Invalid order ID', 'Invalid Order', array('response' => 400));
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
             }
 
             $order = wc_get_order($order_id);
 
             if (!$order) {
-                wp_die('Order not found', 'Invalid Order', array('response' => 404));
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
             }
 
-            // Add a note to the order about the DFX webhook call
-            $order->add_order_note(
-                sprintf('DFX webhook received with status: %s', $data['payment']['status']),
-                false, // This makes the note private (only visible to admin)
-                true  // This adds the note as a separate line item
-            );
+            // Check if the order is in a 'pending' state
+            if ($order->get_status() !== 'pending') {
+                wp_die('Webhook processed', 'Success', array('response' => 200));
+            }
 
+            // Check if the amount and currency are present in the payload
+            if (!isset($data['payment']['amount']) || !isset($data['payment']['currency']['name'])) {
+                error_log('DFX webhook: Payment amount or currency is missing');
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+            }
+
+            // Check if the amount in the payload matches the order amount
+            $payload_amount = floatval($data['payment']['amount']);
+            $order_amount = floatval($order->get_total());
+
+            if ($payload_amount !== $order_amount) {
+                $order->add_order_note(
+                    sprintf('DFX payment amount mismatch. Expected: %f, Received: %f', $order_amount, $payload_amount),
+                    false,
+                    true
+                );
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+            }
+
+            // Check if the currency in the payload matches the order currency
+            $payload_currency = strtoupper($data['payment']['currency']['name']);
+            $order_currency = strtoupper($order->get_currency());
+
+            if ($payload_currency !== $order_currency) {
+                $order->add_order_note(
+                    sprintf('DFX payment currency mismatch. Expected: %s, Received: %s', $order_currency, $payload_currency),
+                    false,
+                    true
+                );
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+            }
+
+            // Process the webhook data
             $status = $data['payment']['status'];
 
             switch ($status) {
@@ -184,19 +238,49 @@ function dfx_init_gateway_class()
                     $order->update_status('failed', __('Payment expired on DFX.', 'woocommerce'));
                     break;
                 case 'Completed':
-                    $order->update_status('on-hold', __('Payment completed on DFX. Awaiting manual confirmation.', 'woocommerce'));
+                    $order->update_status('processing', __('Payment completed on DFX. Order is being prepared for shipping.', 'woocommerce'));
+                    break;
+                case 'Pending':
+                    // Order is already in pending state, no need to update
                     break;
                 default:
-                    // Add a note for unknown status
                     $order->add_order_note(
                         sprintf('Unknown DFX payment status received: %s', $status),
-                        false, // This makes the note private (only visible to admin)
-                        true  // This adds the note as a separate line item
+                        false,
+                        true
                     );
                     break;
             }
 
-            wp_die('Webhook processed successfully', 'Success', array('response' => 200));
+            wp_die('Webhook processed', 'Success', array('response' => 200));
+        }
+
+        private function verify_signature($payload, $signature, $public_key)
+        {
+            // Check if any of the required parameters are empty
+            if (empty($payload) || empty($signature) || empty($public_key)) {
+                return false;
+            }
+
+            // Decode the base64 signature
+            $decoded_signature = base64_decode($signature);
+            if ($decoded_signature === false) {
+                return false;
+            }
+
+            // Get the public key resource
+            $public_key_resource = openssl_pkey_get_public($public_key);
+            if ($public_key_resource === false) {
+                return false;
+            }
+
+            // Verify the signature
+            $verify = openssl_verify($payload, $decoded_signature, $public_key_resource, OPENSSL_ALGO_SHA256);
+            
+            // Free the key resource
+            openssl_free_key($public_key_resource);
+
+            return $verify === 1;
         }
     }
 }
