@@ -156,8 +156,8 @@ function dfx_init_gateway_class()
             $payload = file_get_contents('php://input');
             $data = json_decode($payload, true);
 
-            // Get the x-dfx-signature header value
-            $dfx_signature = isset($_SERVER['HTTP_X_DFX_SIGNATURE']) ? sanitize_text_field($_SERVER['HTTP_X_DFX_SIGNATURE']) : '';
+            // Get the x-payload-signature header value
+            $dfx_signature = isset($_SERVER['HTTP_X_PAYLOAD_SIGNATURE']) ? sanitize_text_field($_SERVER['HTTP_X_PAYLOAD_SIGNATURE']) : '';
 
             // Get the public key from settings
             $public_key = $this->get_option('public_key');
@@ -172,7 +172,16 @@ function dfx_init_gateway_class()
             }
 
             // Continue processing only if signature is verified
-            if (!isset($data['payment']['status']) || !isset($data['externalId'])) {
+            if (!isset($data['payment']['status']) || !isset($data['externalId']) || !isset($data['routeId'])) {
+                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+            }
+
+            // Validate routeId
+            $stored_route_id = $this->get_option('routeId');
+            $incoming_route_id = $data['routeId'];
+
+            // Ensure both values are strings for comparison
+            if (strval($stored_route_id) !== strval($incoming_route_id)) {
                 wp_die('Webhook processing failed', 'Error', array('response' => 400));
             }
 
@@ -262,6 +271,9 @@ function dfx_init_gateway_class()
                 return false;
             }
 
+            // Hash the payload using SHA-256
+            $hashed_payload = hash('sha256', $payload);
+
             // Decode the base64 signature
             $decoded_signature = base64_decode($signature);
             if ($decoded_signature === false) {
@@ -274,8 +286,8 @@ function dfx_init_gateway_class()
                 return false;
             }
 
-            // Verify the signature
-            $verify = openssl_verify($payload, $decoded_signature, $public_key_resource, OPENSSL_ALGO_SHA256);
+            // Verify the signature against the hashed payload
+            $verify = openssl_verify($hashed_payload, $decoded_signature, $public_key_resource, OPENSSL_ALGO_SHA256);
             
             // Free the key resource
             openssl_free_key($public_key_resource);
