@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.4
+ * Version: 1.0.5
  */
 
 if (! defined('ABSPATH')) {
@@ -205,8 +205,7 @@ function dfx_init_gateway_class()
             }
 
             // Check if the amount and currency are present in the payload
-            if (!isset($data['payment']['amount']) || !isset($data['payment']['currency']['name'])) {
-                error_log('DFX webhook: Payment amount or currency is missing');
+            if (!isset($data['payment']['amount']) || !isset($data['payment']['currency'])) {
                 wp_die('Webhook processing failed', 'Error', array('response' => 400));
             }
 
@@ -224,7 +223,7 @@ function dfx_init_gateway_class()
             }
 
             // Check if the currency in the payload matches the order currency
-            $payload_currency = strtoupper($data['payment']['currency']['name']);
+            $payload_currency = strtoupper($data['payment']['currency']);
             $order_currency = strtoupper($order->get_currency());
 
             if ($payload_currency !== $order_currency) {
