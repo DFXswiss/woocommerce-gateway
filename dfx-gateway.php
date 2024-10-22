@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.5
+ * Version: 1.0.6
  */
 
 if (! defined('ABSPATH')) {
@@ -122,6 +122,18 @@ function dfx_init_gateway_class()
         public function process_payment($order_id)
         {
             $order = wc_get_order($order_id);
+            
+            // Get the routeId
+            $dfx_settings = get_option('woocommerce_dfx_settings', array());
+            $routeId = isset($dfx_settings['routeId']) ? $dfx_settings['routeId'] : '';
+
+            // Check if routeId is set
+            if (empty($routeId)) {
+                wc_add_notice(__('Payment error: RouteId is not set. Please contact the store administrator.', 'woocommerce'), 'error');
+                return array(
+                    'result' => 'failure',
+                );
+            }
 
             // Mark as pending (we're awaiting the payment)
             $order->update_status('pending', __('Awaiting DFX payment', 'woocommerce'));
@@ -135,16 +147,27 @@ function dfx_init_gateway_class()
             // Get the amount
             $amount = $order->get_total();
 
-            // Build the URL for the dfx-pay page with parameters
+            // Get the thank you page URL
+            $thank_you_url = $order->get_checkout_order_received_url();
+
+            // Get other required parameters
+            $expiryDate = date('Y-m-d\TH:i:s\Z', strtotime('+1 month'));
+            $webhook_url = WC()->api_request_url('dfx_gateway');
+
+            // Build the URL for the DFX payment page
             $dfx_pay_url = add_query_arg(
                 array(
-                    'orderId' => $order_id,
+                    'routeId' => $routeId,
+                    'message' => $order_id,
                     'amount' => $amount,
+                    'expiryDate' => $expiryDate,
+                    'webhookUrl' => $webhook_url,
+                    'redirect-uri' => $thank_you_url,
                 ),
-                home_url('/dfx-pay/')
+                'https://services.dfx.swiss/pl'
             );
 
-            // Return redirect to dfx-pay page
+            // Return redirect to DFX payment page
             return array(
                 'result'   => 'success',
                 'redirect' => $dfx_pay_url,

@@ -6,7 +6,7 @@
   "scripts": {
     "build": "wp-scripts build",
     "start": "wp-scripts start",
-    "build:plugin": "npm run build && zip -r dfx-plugin.zip build includes template dfx-gateway.php"
+    "build:plugin": "npm run build && zip -r dfx-plugin.zip build includes dfx-gateway.php"
   },
   "keywords": [],
   "author": "",

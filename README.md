@@ -31,19 +31,6 @@ The WooCommerce DFX Payment Gateway plugin integrates DFX's cryptocurrency payme
 7. Activate the plugin through the 'Plugins' menu in WordPress.
 8. Go to WooCommerce > Settings > Payments and configure the DFX Gateway settings.
 
-## Adding the DFX Payment Page
-
-To add the DFX payment page to your WordPress site:
-
-1. Create a new page in WordPress (e.g., "DFX Pay").
-2. Add the following shortcode to the page content:
-   ```
-   [dfx_pay_shortcode]
-   ```
-3. Publish the page.
-4. Note the URL of this page (e.g., `https://your-site.com/dfx-pay/`).
-
-The shortcode `[dfx_pay_shortcode]` will render the DFX payment iframe on the page, allowing customers to complete their cryptocurrency payments.
 
 ## Configuration
 
