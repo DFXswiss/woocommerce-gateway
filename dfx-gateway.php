@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.8
+ * Version: 1.0.9
  */
 
 if (! defined('ABSPATH')) {
@@ -244,7 +244,7 @@ function dfx_init_gateway_class()
                 return;
             }
             
-            $order->add_order_note('webhook notification received', true, true);
+            $order->add_order_note('webhook notification received', false, false);
 
             if (!isset($data['payment']['status']) || !isset($data['routeId'])) {
                 $logger->error('DFX webhook: Missing payment status or routeId for orderId: ' . $order_id, [
@@ -269,7 +269,7 @@ function dfx_init_gateway_class()
 
             // Check if the order is in a 'pending' state
             if ($order->get_status() !== 'pending') {
-                $order->add_order_note('webhook notification failed to process order', true, true);
+                $order->add_order_note('webhook notification failed to process order', false, false);
                 $logger->info('DFX webhook: Order already processed for orderId: ' . $order_id, [
                     'source' => 'dfx-gateway',
                     'data' => $data,
@@ -279,7 +279,7 @@ function dfx_init_gateway_class()
 
             // Check if the amount and currency are present in the payload
             if (!isset($data['payment']['amount']) || !isset($data['payment']['currency'])) {
-                $order->add_order_note('webhook notification failed to process order', true, true);
+                $order->add_order_note('webhook notification failed to process order', false, false);
                 $logger->error('DFX webhook: Missing payment amount or currency for orderId: ' . $order_id, [
                     'source' => 'dfx-gateway',
                     'data' => $data
@@ -295,7 +295,7 @@ function dfx_init_gateway_class()
                 $order->add_order_note(
                     sprintf('DFX payment amount mismatch. Expected: %f, Received: %f', $order_amount, $payload_amount),
                     false,
-                    true
+                    false
                 );
                 $logger->error('DFX webhook: Payment amount mismatch for orderId: ' . $order_id, [
                     'source' => 'dfx-gateway',
@@ -314,7 +314,7 @@ function dfx_init_gateway_class()
                 $order->add_order_note(
                     sprintf('DFX payment currency mismatch. Expected: %s, Received: %s', $order_currency, $payload_currency),
                     false,
-                    true
+                    false
                 );
                 $logger->error('DFX webhook: Payment currency mismatch for orderId: ' . $order_id, [
                     'source' => 'dfx-gateway',
@@ -345,7 +345,7 @@ function dfx_init_gateway_class()
                     $order->add_order_note(
                         sprintf('Unknown DFX payment status received: %s', $status),
                         false,
-                        true
+                        false
                     );
                     break;
             }
