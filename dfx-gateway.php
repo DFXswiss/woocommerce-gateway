@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.6
+ * Version: 1.0.8
  */
 
 if (! defined('ABSPATH')) {
@@ -176,11 +176,28 @@ function dfx_init_gateway_class()
 
         public function handle_webhook()
         {
+            $logger = wc_get_logger();
+            
+            // Get the payload
             $payload = file_get_contents('php://input');
-            $data = json_decode($payload, true);
 
-            // Get the x-payload-signature header value
+            // Get the signature
             $dfx_signature = isset($_SERVER['HTTP_X_PAYLOAD_SIGNATURE']) ? sanitize_text_field($_SERVER['HTTP_X_PAYLOAD_SIGNATURE']) : '';
+            
+            // Send a 200 OK response immediately
+            header('HTTP/1.1 200 OK');
+            header('Content-Type: application/json');
+            echo json_encode(['status' => 'processing']);
+
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } else {
+                ob_end_flush();
+                flush();
+            }
+
+            // Decode the payload
+            $data = json_decode($payload, true);
 
             // Get the public key from settings
             $public_key = $this->get_option('public_key');
@@ -188,15 +205,53 @@ function dfx_init_gateway_class()
             // Verify the signature against the public key and the payload
             $verification_result = $this->verify_signature($payload, $dfx_signature, $public_key);
 
-            // If verification fails, log it and return a generic error
             if (!$verification_result) {
-                error_log('DFX webhook: Signature verification failed');
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+                $logger->error('DFX webhook: Signature verification failed', [
+                    'source' => 'dfx-gateway',
+                    'payload' => $payload,
+                    'signature' => $dfx_signature,
+                ]);
+                return;
             }
 
-            // Continue processing only if signature is verified
-            if (!isset($data['payment']['status']) || !isset($data['externalId']) || !isset($data['routeId'])) {
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+            if (!isset($data['externalId'])) {
+                $logger->error('DFX webhook: Missing externalId: ' . $data['externalId'], [
+                    'source' => 'dfx-gateway',
+                    'data' => $data
+                ]);
+                return;
+            }
+
+            // Extract order_id from externalId
+            $external_id_parts = explode('/', $data['externalId']);
+            $order_id = isset($external_id_parts[0]) ? intval($external_id_parts[0]) : null;
+
+            if (!$order_id) {
+                $logger->error('DFX webhook: Invalid format for externalId: ' . $data['externalId'], [
+                    'source' => 'dfx-gateway',
+                    'data' => $data
+                ]);
+                return;
+            }
+
+            $order = wc_get_order($order_id);
+            
+            if (!$order) {
+                $logger->error('DFX webhook: Order not found for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'data' => $data
+                ]);
+                return;
+            }
+            
+            $order->add_order_note('webhook notification received', true, true);
+
+            if (!isset($data['payment']['status']) || !isset($data['routeId'])) {
+                $logger->error('DFX webhook: Missing payment status or routeId for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'data' => $data
+                ]);
+                return;
             }
 
             // Validate routeId
@@ -205,31 +260,31 @@ function dfx_init_gateway_class()
 
             // Ensure both values are strings for comparison
             if (strval($stored_route_id) !== strval($incoming_route_id)) {
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
-            }
-
-            // Extract order_id from externalId
-            $external_id_parts = explode('/', $data['externalId']);
-            $order_id = isset($external_id_parts[0]) ? intval($external_id_parts[0]) : null;
-
-            if (!$order_id) {
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
-            }
-
-            $order = wc_get_order($order_id);
-
-            if (!$order) {
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+                $logger->error('DFX webhook: RouteId mismatch for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'data' => $data,
+                ]);
+                return;
             }
 
             // Check if the order is in a 'pending' state
             if ($order->get_status() !== 'pending') {
-                wp_die('Webhook processed', 'Success', array('response' => 200));
+                $order->add_order_note('webhook notification failed to process order', true, true);
+                $logger->info('DFX webhook: Order already processed for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'data' => $data,
+                ]);
+                return;
             }
 
             // Check if the amount and currency are present in the payload
             if (!isset($data['payment']['amount']) || !isset($data['payment']['currency'])) {
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+                $order->add_order_note('webhook notification failed to process order', true, true);
+                $logger->error('DFX webhook: Missing payment amount or currency for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'data' => $data
+                ]);
+                return;
             }
 
             // Check if the amount in the payload matches the order amount
@@ -242,7 +297,13 @@ function dfx_init_gateway_class()
                     false,
                     true
                 );
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+                $logger->error('DFX webhook: Payment amount mismatch for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'expected_amount' => $order_amount,
+                    'received_amount' => $payload_amount,
+                    'data' => $data,
+                ]);
+                return;
             }
 
             // Check if the currency in the payload matches the order currency
@@ -255,7 +316,13 @@ function dfx_init_gateway_class()
                     false,
                     true
                 );
-                wp_die('Webhook processing failed', 'Error', array('response' => 400));
+                $logger->error('DFX webhook: Payment currency mismatch for orderId: ' . $order_id, [
+                    'source' => 'dfx-gateway',
+                    'expected_currency' => $order_currency,
+                    'received_currency' => $payload_currency,
+                    'data' => $data,
+                ]);
+                return;
             }
 
             // Process the webhook data
@@ -283,7 +350,10 @@ function dfx_init_gateway_class()
                     break;
             }
 
-            wp_die('Webhook processed', 'Success', array('response' => 200));
+            $logger->info('DFX webhook: webhook processed succesfully for order ' . $order_id, [
+                'source' => 'dfx-gateway',
+                'data' => $data,
+            ]);
         }
 
         private function verify_signature($payload, $signature, $public_key)
