@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.9
+ * Version: 1.0.10
  */
 
 if (! defined('ABSPATH')) {
