@@ -164,7 +164,7 @@ function dfx_init_gateway_class()
                     'webhookUrl' => $webhook_url,
                     'redirect-uri' => $thank_you_url,
                 ),
-                'https://services.dfx.swiss/pl'
+                'https://app.dfx.swiss/pl'
             );
 
             // Return redirect to DFX payment page
