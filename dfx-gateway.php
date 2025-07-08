@@ -3,7 +3,7 @@
  * Plugin Name: WooCommerce DFX Payment Gateway
  * Description: Take cryptocurrency payments in your Woocommerce store.
  * Author: DFX
- * Version: 1.0.10
+ * Version: 1.0.13
  */
 
 if (! defined('ABSPATH')) {
@@ -151,7 +151,7 @@ function dfx_init_gateway_class()
             $thank_you_url = $order->get_checkout_order_received_url();
 
             // Get other required parameters
-            $expiryDate = date('Y-m-d\TH:i:s\Z', strtotime('+1 month'));
+            $expiryDate = date('Y-m-d\TH:i:s\Z', strtotime('+1 hour'));
             $webhook_url = WC()->api_request_url('dfx_gateway');
 
             // Build the URL for the DFX payment page
